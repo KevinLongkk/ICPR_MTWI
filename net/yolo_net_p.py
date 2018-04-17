@@ -16,36 +16,33 @@ def build_network(
                             activation_fn=leaky_relu(alpha),
                             weights_initializer=tf.truncated_normal_initializer(0.0, 0.01),
                             weights_regularizer=slim.l2_regularizer((0.0005)),
-                            variables_collections='Variables'):
+                            biases_initializer=tf.constant_initializer(0.1)):
             net = tf.pad(images, np.array([[0, 0], [3, 3], [3, 3], [0, 0]]), name='pad_1')
-            net = slim.conv2d(net, 64, 7, 2, padding='VALID', scope='conv_2', trainable=False)
+            net = slim.conv2d(net, 64, 7, 2, padding='VALID', scope='conv_2')
             net = slim.max_pool2d(net, 2, padding='SAME', scope='pool_3')
-            net = slim.conv2d(net, 192, 3, scope='conv_4', trainable=False)
+            net = slim.conv2d(net, 192, 3, scope='conv_4')
             net = slim.max_pool2d(net, 2, padding='SAME', scope='pool_5')
-            net = slim.conv2d(net, 128, 1, scope='conv_6', trainable=False)
-            net = slim.conv2d(net, 256, 3, scope='conv_7', trainable=False)
-            net = slim.conv2d(net, 256, 1, scope='conv_8', trainable=False)
-            net = slim.conv2d(net, 512, 3, scope='conv_9', trainable=False)
+            net = slim.conv2d(net, 128, 1, scope='conv_6')
+            net = slim.conv2d(net, 256, 3, scope='conv_7')
+            net = slim.conv2d(net, 256, 1, scope='conv_8')
+            net = slim.conv2d(net, 512, 3, scope='conv_9')
             net = slim.max_pool2d(net, 2, padding='SAME', scope='pool_10')
-            net = slim.conv2d(net, 256, 1, scope='conv_11', trainable=False)
-            net = slim.conv2d(net, 512, 3, scope='conv_12', trainable=False)
-            net = slim.conv2d(net, 256, 1, scope='conv_13', trainable=False)
-            net = slim.conv2d(net, 512, 3, scope='conv_14', trainable=False)
-            net = slim.conv2d(net, 256, 1, scope='conv_15', trainable=False)
-            net = slim.conv2d(net, 512, 3, scope='conv_16', trainable=False)
-            net = slim.conv2d(net, 256, 1, scope='conv_17', trainable=False)
-            net = slim.conv2d(net, 512, 3, scope='conv_18', trainable=False)
-            net = slim.conv2d(net, 512, 1, scope='conv_19', trainable=False)
-            tf.summary.histogram('conv19', net)
+            net = slim.conv2d(net, 256, 1, scope='conv_11')
+            net = slim.conv2d(net, 512, 3, scope='conv_12')
+            net = slim.conv2d(net, 256, 1, scope='conv_13')
+            net = slim.conv2d(net, 512, 3, scope='conv_14')
+            net = slim.conv2d(net, 256, 1, scope='conv_15')
+            net = slim.conv2d(net, 512, 3, scope='conv_16')
+            net = slim.conv2d(net, 256, 1, scope='conv_17')
+            net = slim.conv2d(net, 512, 3, scope='conv_18')
+            net = slim.conv2d(net, 512, 1, scope='conv_19')
             net = slim.conv2d(net, 1024, 3, scope='conv_20')
-            tf.summary.histogram('conv20', net)
             net = slim.max_pool2d(net, 2, padding='SAME', scope='pool_21')
             net = slim.conv2d(net, 512, 1, scope='conv_22')
             net = slim.conv2d(net, 1024, 3, scope='conv_23')
             net = slim.conv2d(net, 512, 1, scope='conv_24')
             net = slim.conv2d(net, 1024, 3, scope='conv_25')
             net = slim.conv2d(net, 1024, 3, scope='conv_26')
-            tf.summary.histogram('conv26', net)
             net = tf.pad(net, np.array([[0, 0], [1, 1], [1, 1], [0, 0]]), name='pad_27')
             net = slim.conv2d(net, 1024, 3, 2, padding='VALID', scope='conv_28')
             net = slim.conv2d(net, 1024, 3, scope='conv_29')
@@ -58,9 +55,6 @@ def build_network(
                                is_training=is_training, scope='dropout_35')
             net = slim.fully_connected(net, num_outputs,
                                        activation_fn=None, scope='fc_36')
-
-            tf.summary.histogram('var', tf.get_collection('Variables'))
-
             # net ~ batch * 7 * 7 * 30
         return net
 
@@ -75,17 +69,11 @@ def loss_layer(predicts, labels, scope='loss_layer'):
         response = tf.reshape(labels[:, :, :, 0], [cfg.BATCH_SIZE, cfg.CELL_SIZE, cfg.CELL_SIZE, 1])
         boxes = tf.reshape(labels[:, :, :, 1:], [cfg.BATCH_SIZE, cfg.CELL_SIZE, cfg.CELL_SIZE, 8])
 
-        pre_response = tf.clip_by_value(pre_response, 1e-8, 1.0)
-        obj_delta = -(response * tf.log(pre_response) + (1-response) * tf.log(1-pre_response))
-        # obj_loss = tf.reduce_mean(tf.reduce_sum(tf.square(response - pre_response), axis=[1, 2, 3])) * 3
+        obj_loss = tf.reduce_mean(tf.reduce_sum(tf.square(response - pre_response), axis=[1, 2, 3])) * 3
         # obj_loss = tf.reduce_sum(tf.square(pre_response - response)) * 3
-        obj_loss = tf.reduce_mean(tf.reduce_sum(obj_delta, axis=[1, 2, 3])) * 5.0
 
-        no_obj_mask = 1 - response
-        boxes_delta = tf.square(boxes - pre_boxes) * response * 1.0
-        no_obj_boxes_delta = tf.square(boxes - pre_boxes) * no_obj_mask * 0.5
-        coord_loss = tf.reduce_mean(tf.reduce_sum(boxes_delta, axis=[1, 2, 3]) +
-                                    tf.reduce_sum(no_obj_boxes_delta, axis=[1, 2, 3]))
+        boxes_delta = tf.square(boxes - pre_boxes) * 1
+        coord_loss = tf.reduce_mean(tf.reduce_sum(boxes_delta, axis=[1, 2, 3]))
         # coord_loss = tf.reduce_sum(boxes_delta)
 
         tf.losses.add_loss(obj_loss)
