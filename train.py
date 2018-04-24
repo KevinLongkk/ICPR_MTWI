@@ -6,6 +6,16 @@ import os
 from net import yolo_net
 from tensorflow.contrib import slim
 
+import math, sys
+
+
+def restart_program():
+    """Restarts the current program.
+    Note: this function does not return. Any cleanup action (like
+    saving data) must be done before calling this function."""
+    python = sys.executable
+    os.execl(python, python, * sys.argv)
+
 
 def train():
 
@@ -23,21 +33,24 @@ def train():
                                                cfg.DECAY_RATE, True, name='learning_rate')
 
     logits = yolo_net.build_network(X, cfg.CELL_SIZE * cfg.CELL_SIZE * 9, cfg.ALPHA, True)
-    loss = yolo_net.loss_layer(logits, Y)
+    loss, boxes, pre_boxes = yolo_net.loss_layer(logits, Y)
 
     # optimizer = tf.train.GradientDescentOptimizer(learning_rate).minimize(loss, global_step)
-    optimizer = tf.train.GradientDescentOptimizer(learning_rate)
+    optimizer_op = tf.train.AdamOptimizer(learning_rate).minimize(loss, global_step)
 
-    params = tf.trainable_variables()
-    gradients = tf.gradients(loss, params)
+    # tf.summary.scalar('learning_rate', learning_rate)
+    #
+    # optimizer = tf.train.AdamOptimizer(learning_rate)
+    # params = tf.trainable_variables()
+    # gradients = tf.gradients(loss, params)
+    #
+    # clipped_gradients, norm = tf.clip_by_global_norm(gradients, 100)
+    # optimizer_op = optimizer.apply_gradients(zip(clipped_gradients, params), global_step)
 
-    clipped_gradients, norm = tf.clip_by_global_norm(gradients, 300)
-    optimizer_op = optimizer.apply_gradients(zip(clipped_gradients, params), global_step)
-
-    # ema = tf.train.ExponentialMovingAverage(decay=0.9999)
-    # average_op = ema.apply(tf.trainable_variables())
-    # with tf.control_dependencies([optimizer_op]):
-    #     train_op = tf.group(average_op)
+    ema = tf.train.ExponentialMovingAverage(decay=0.9999)
+    average_op = ema.apply(tf.trainable_variables())
+    with tf.control_dependencies([optimizer_op]):
+        train_op = tf.group(average_op)
 
     saver = tf.train.Saver()
     # restorer = tf.train.Saver(tf.trainable_variables())
@@ -61,16 +74,23 @@ def train():
         merged_summary_op = tf.summary.merge_all()
         summary_writer = tf.summary.FileWriter('log', sess.graph)
 
-        for step in range(1, 100000):
+        for step in range(1, 300000):
             images, labels = data_mtwi.get_data(9000)
             feed_dict = {X: images, Y: labels}
-            losses, _ = sess.run([loss, optimizer_op], feed_dict=feed_dict)
+            losses, learning_rate_, _ = sess.run([loss, learning_rate, train_op], feed_dict=feed_dict)
+            #当出现NAN时,程序重新启动
+            if math.isnan(losses):
+                print('restart')
+                restart_program()
             if step % 10 == 0:
+                # print(sess.run(boxes, feed_dict=feed_dict))
+                # print(sess.run(pre_boxes, feed_dict=feed_dict))
+                # print(sess.run(gradients, feed_dict=feed_dict))
                 global_step_ = sess.run(global_step)
                 summary_str = sess.run(merged_summary_op, feed_dict=feed_dict)
                 summary_writer.add_summary(summary_str, global_step_)
-                print('{}steps, total_loss is {}'.format(global_step_, losses))
-            if step % 100 == 0:
+                print('{}steps, total_loss is {}, learning_rate is {}'.format(global_step_, losses, learning_rate_))
+            if step % 200 == 0:
                 saver.save(sess, save_path=output_dir, global_step=global_step)
                 print('save model success')
 

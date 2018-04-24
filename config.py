@@ -1,10 +1,10 @@
 import os
 
-BATCH_SIZE = 32
+BATCH_SIZE = 10
 
 IMAGE_SIZE = 448
 
-CELL_SIZE = 19
+CELL_SIZE = 24
 
 DATA_PATH = r'/home/kevin/DataSet/tianchi/ICPR_MTWI'
 
@@ -22,7 +22,7 @@ ALPHA = 0.0001
 
 
 
-LEARNING_RATE = 0.0001
+LEARNING_RATE = 1e-2
 
 DECAY_STEPS = 30000
 
